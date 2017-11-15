@@ -58,8 +58,7 @@ proc vncmgr {} {
     if {[regexp {^(\S+):(\d+)\s*} $session_text -> host disp]} {
       puts stderr "SESSION FOUND: $host $disp"
       if {![vncping $host $disp]} {
-	puts -nonewline $session_text
-	exit 0
+	return $session_text
       }
     }
   }
@@ -69,8 +68,7 @@ proc vncmgr {} {
 
   puts stderr "Starting session on :$disp"
   if {[catch {open "/dev/null" r+} stdio]} {
-    puts stderr "/dev/null: $stdio"
-    exit 2
+    error "/dev/null: $stdio"
   }
   global tcl_platform env
   exec setsid Xvnc \
@@ -89,15 +87,37 @@ proc vncmgr {} {
     exec xterm  <@ $stdio >&@ $stdio &
   }
   after 1500
-  if {![catch {open [session_file] w} fd]} {
-    set session_text "[localhost]:$disp"
-    puts $fd $session_text
-    close $fd
-    puts $session_text
-  } else {
-    puts stderr "[session_file]: $fd"
-    exit 4
+  set fd [open [session_file] w]
+  set session_text "[localhost]:$disp"
+  puts $fd $session_text
+  close $fd
+  return $session_text
+}
+
+proc in_sshvnc {} {
+  set session_text [vncmgr]
+  if {![regexp {^(\S+):(\d+)\s*} $session_text -> host_name host_disp]} {
+    error "Error setting up Xvnc session"
   }
+  set host_port [expr {$host_disp + 5900}]
+
+  set sock [socket $host_name $host_port]
+  fconfigure $sock -translation binary -blocking 0 -buffering none
+  fconfigure stdin -translation binary -blocking 0 -buffering none
+  fconfigure stdout -translation binary -blocking 0 -buffering none
+  fileevent $sock readable [list copy_when_ready $sock stdout]
+  fileevent stdin readable [list copy_when_ready stdin $sock]
+
+  vwait forever
+}
+
+proc copy_when_ready {in out} {
+  if {[eof $in]} {
+    catch {close $in} r
+    catch {close $out} w
+    return
+  }
+  puts -nonewline $out [read $in]
 }
 
 if {[llength $argv] == 0} {
@@ -121,7 +141,11 @@ switch [lindex $argv 0] {
     exit [vncping [lindex $argv 1] [lindex $argv 2]]
   }
   vncmgr {
-    vncmgr
+    puts [vncmgr]
+    exit
+  }
+  in_sshvnc {
+    in_sshvnc
     exit
   }
   default {
