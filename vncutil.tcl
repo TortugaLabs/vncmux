@@ -21,7 +21,7 @@ proc allocdisp {args} {
   return {}
 }
 
-proc vncping {host disp} {
+proc vncping {host disp {passwd {}} {
   set port [expr {$disp + 5900}]
   if {[catch {socket $host $port} sock]} {
     # Connection failed, so we quit...
@@ -39,7 +39,11 @@ proc vncping {host disp} {
   }
   puts -nonewline $sock "RFB 003.003\n";
   set security_type [read $sock 4]
-  if {"\0\0\0\1" != $security_type} {
+  if {"\0\0\0\2" == $security_type} {
+    # VNCAuth...
+    close $sock
+    return 50
+  } elseif {"\0\0\0\1" != $security_type} {
     close $sock
     return 40
   }
@@ -77,6 +81,7 @@ proc vncmgr {} {
 	-pixelformat RGB565 \
 	-desktop "$tcl_platform(user)@[info hostname]" \
 	-Protocol3.3 \
+	-localhost \
 	-SecurityTypes None \
 	:$disp <@ $stdio >& [file join $env(HOME) .xvnc.log] &
   after 1500
