@@ -21,7 +21,7 @@ proc allocdisp {args} {
   return {}
 }
 
-proc vncping {host disp {passwd {}} {
+proc vncping {host disp {passwd {}}} {
   set port [expr {$disp + 5900}]
   if {[catch {socket $host $port} sock]} {
     # Connection failed, so we quit...
@@ -52,6 +52,7 @@ proc vncping {host disp {passwd {}} {
   close $sock
   return 0
 }
+
 
 proc vncmgr {} {
   if {![catch {open [session_file] r} fd]} {
